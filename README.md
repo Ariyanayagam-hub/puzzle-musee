@@ -1,2 +1,2 @@
 # puzzle-musee
-démo jeu
+
