@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Puzzle du Musée</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            touch-action: manipulation;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-size: 2em;
+            margin-bottom: 10px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 30px;
+            font-weight: 300;
+        }
+
+        #puzzle-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 3px;
+            background: #34495e;
+            padding: 3px;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin: 0 auto 30px;
+            width: 90vw;
+            max-width: 500px;
+            aspect-ratio: 1;
+        }
+
+        .tile {
+            background-size: 300% 300%;
+            background-color: #fff;
+            background-repeat: no-repeat;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tile:not(.empty) {
+            background-color: #f8f8f8;
+        }
+
+        .tile:hover {
+            transform: scale(0.98);
+        }
+
+        .tile.empty {
+            background: #2c3e50;
+            cursor: default;
+        }
+
+        .tile.empty:hover {
+            transform: none;
+        }
+
+        .tile:active {
+            transform: scale(0.95);
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #victory-message {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .victory-content {
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .victory-content h2 {
+            font-size: 3em;
+            color: #27ae60;
+            margin-bottom: 20px;
+            font-weight: 300;
+        }
+
+        .victory-content p {
+            font-size: 1.2em;
+            color: #7f8c8d;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+            }
+            
+            .victory-content {
+                padding: 30px;
+                margin: 20px;
+            }
+            
+            .victory-content h2 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PUZZLE DU MUSÉE</h1>
+        <p class="subtitle">Reconstituez l'architecture</p>
+        <div id="puzzle-board"></div>
+        <button onclick="shufflePuzzle()">Nouveau Puzzle</button>
+    </div>
+
+    <div id="victory-message">
+        <div class="victory-content">
+            <h2>🎉 Bravo !</h2>
+            <p>Vous avez résolu le puzzle !</p>
+        </div>
+    </div>
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <script>
+        // 🎨 VARIABLE IMPORTANTE : Changez cette URL pour utiliser votre propre image !
+        const imageUrl = 'halle.jpeg';
+
+        const gridSize = 3;
+        let tiles = [];
+        let emptyIndex = 8;
+        const board = document.getElementById('puzzle-board');
+        let imageLoaded = false;
+
+        // Précharger l'image avant de commencer
+        function preloadImage() {
+            const img = new Image();
+            img.onload = function() {
+                imageLoaded = true;
+                initPuzzle();
+                shufflePuzzle();
+            };
+            img.onerror = function() {
+                alert("Erreur : L'image 'halle.jpeg' n'a pas pu être chargée. Vérifiez que le fichier est bien dans le même dossier que puzzle.html");
+            };
+            img.src = imageUrl;
+        }
+
+        // Initialisation du puzzle
+        function initPuzzle() {
+            board.innerHTML = '';
+            tiles = [];
+            
+            for (let i = 0; i < gridSize * gridSize; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.dataset.index = i;
+                
+                if (i === emptyIndex) {
+                    tile.classList.add('empty');
+                } else {
+                    const row = Math.floor(i / gridSize);
+                    const col = i % gridSize;
+                    tile.style.backgroundImage = `url(${imageUrl})`;
+                    tile.style.backgroundPosition = `${col * 50}% ${row * 50}%`;
+                }
+                
+                tile.addEventListener('click', () => moveTile(i));
+                board.appendChild(tile);
+                tiles.push(tile);
+            }
+        }
+
+        // Déplacer une tuile
+        function moveTile(index) {
+            const row = Math.floor(index / gridSize);
+            const col = index % gridSize;
+            const emptyRow = Math.floor(emptyIndex / gridSize);
+            const emptyCol = emptyIndex % gridSize;
+            
+            // Vérifier si la tuile est adjacente à la case vide
+            const isAdjacent = (Math.abs(row - emptyRow) === 1 && col === emptyCol) ||
+                              (Math.abs(col - emptyCol) === 1 && row === emptyRow);
+            
+            if (isAdjacent && !tiles[index].classList.contains('empty')) {
+                // Échanger les tuiles
+                const tempBg = tiles[index].style.backgroundImage;
+                const tempPos = tiles[index].style.backgroundPosition;
+                
+                tiles[index].style.backgroundImage = '';
+                tiles[index].style.backgroundPosition = '';
+                tiles[index].classList.add('empty');
+                
+                tiles[emptyIndex].style.backgroundImage = tempBg;
+                tiles[emptyIndex].style.backgroundPosition = tempPos;
+                tiles[emptyIndex].classList.remove('empty');
+                
+                emptyIndex = index;
+                
+                // Vérifier si le puzzle est résolu
+                setTimeout(checkWin, 300);
+            }
+        }
+
+        // Mélanger le puzzle
+        function shufflePuzzle() {
+            // Réinitialiser
+            emptyIndex = 8;
+            initPuzzle();
+            
+            // Faire 100 mouvements aléatoires valides
+            for (let i = 0; i < 100; i++) {
+                const possibleMoves = getPossibleMoves();
+                const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                
+                // Échanger sans animation
+                const tempBg = tiles[randomMove].style.backgroundImage;
+                const tempPos = tiles[randomMove].style.backgroundPosition;
+                
+                tiles[randomMove].style.backgroundImage = '';
+                tiles[randomMove].style.backgroundPosition = '';
+                tiles[randomMove].classList.add('empty');
+                
+                tiles[emptyIndex].style.backgroundImage = tempBg;
+                tiles[emptyIndex].style.backgroundPosition = tempPos;
+                tiles[emptyIndex].classList.remove('empty');
+                
+                emptyIndex = randomMove;
+            }
+        }
+
+        // Obtenir les mouvements possibles
+        function getPossibleMoves() {
+            const row = Math.floor(emptyIndex / gridSize);
+            const col = emptyIndex % gridSize;
+            const moves = [];
+            
+            if (row > 0) moves.push(emptyIndex - gridSize); // haut
+            if (row < gridSize - 1) moves.push(emptyIndex + gridSize); // bas
+            if (col > 0) moves.push(emptyIndex - 1); // gauche
+            if (col < gridSize - 1) moves.push(emptyIndex + 1); // droite
+            
+            return moves;
+        }
+
+        // Vérifier la victoire
+        function checkWin() {
+            let isWin = emptyIndex === 8;
+            
+            if (isWin) {
+                for (let i = 0; i < tiles.length - 1; i++) {
+                    const row = Math.floor(i / gridSize);
+                    const col = i % gridSize;
+                    const expectedPos = `${col * 50}% ${row * 50}%`;
+                    
+                    if (tiles[i].style.backgroundPosition !== expectedPos) {
+                        isWin = false;
+                        break;
+                    }
+                }
+            }
+            
+            if (isWin) {
+                setTimeout(() => {
+                    document.getElementById('victory-message').style.display = 'flex';
+                    launchConfetti();
+                }, 300);
+            }
+        }
+
+        // Animation de confettis
+        function launchConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const confetti = [];
+            const confettiCount = 150;
+            const colors = ['#3498db', '#e74c3c', '#f39c12', '#2ecc71', '#9b59b6'];
+            
+            for (let i = 0; i < confettiCount; i++) {
+                confetti.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    r: Math.random() * 6 + 4,
+                    d: Math.random() * confettiCount,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    tilt: Math.floor(Math.random() * 10) - 10,
+                    tiltAngleIncremental: Math.random() * 0.07 + 0.05,
+                    tiltAngle: 0
+                });
+            }
+            
+            function drawConfetti() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                confetti.forEach((c, i) => {
+                    ctx.beginPath();
+                    ctx.lineWidth = c.r / 2;
+                    ctx.strokeStyle = c.color;
+                    ctx.moveTo(c.x + c.tilt + c.r / 4, c.y);
+                    ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r / 4);
+                    ctx.stroke();
+                    
+                    c.tiltAngle += c.tiltAngleIncremental;
+                    c.y += (Math.cos(c.d) + 3 + c.r / 2) / 2;
+                    c.x += Math.sin(c.d);
+                    c.tilt = Math.sin(c.tiltAngle - i / 3) * 15;
+                    
+                    if (c.y > canvas.height) {
+                        confetti[i] = {
+                            x: Math.random() * canvas.width,
+                            y: -10,
+                            r: c.r,
+                            d: c.d,
+                            color: c.color,
+                            tilt: c.tilt,
+                            tiltAngleIncremental: c.tiltAngleIncremental,
+                            tiltAngle: c.tiltAngle
+                        };
+                    }
+                });
+                
+                requestAnimationFrame(drawConfetti);
+            }
+            
+            drawConfetti();
+            
+            // Fermer la popup après 5 secondes
+            setTimeout(() => {
+                document.getElementById('victory-message').style.display = 'none';
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }, 5000);
+        }
+
+        // Démarrer le jeu après chargement de l'image
+        window.addEventListener('load', preloadImage);
+    </script>
+</body>
+</html>
